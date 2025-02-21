@@ -1,6 +1,6 @@
 [project]
 name = "cbz_merger"
-version = "0.1.0"
+version = "0.1.1"
 description = "Merges multiple CBZ/CBR files into one"
 readme = "README.md"
 dependencies = [

@@ -17,8 +17,8 @@ wheels = [
 ]
 
 [[package]]
-name = "cbz_merger"
-version = "0.1.0"
+name = "cbz-merger"
+version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "build" },
