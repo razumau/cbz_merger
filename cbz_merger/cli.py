@@ -1,8 +1,7 @@
 import argparse
+import tempfile
 import zipfile
-from typing import List
 from glob import glob
-from shutil import rmtree
 import os
 from os.path import splitext, basename, join
 
@@ -11,17 +10,18 @@ import rarfile
 rarfile.UNRAR_TOOL = "unrar"
 
 
-def list_cbz_files(folder) -> List:
+def list_cbz_files(folder: str) -> list:
     print(f"Listing files in {folder}")
     result = glob(f"{folder}/*.cbz") + glob(f"{folder}/*.cbr")
     print(f"Found {len(result)} files")
     return sorted(result)
 
 
-def list_pages(folder) -> List:
+def list_pages(folder: str) -> list:
     jpgs = glob(f"{folder}/**/*.jpg", recursive=True)
     pngs = glob(f"{folder}/**/*.png", recursive=True)
-    return sorted(jpgs + pngs)
+    webps = glob(f"{folder}/**/*.webp", recursive=True)
+    return sorted(jpgs + pngs + webps)
 
 
 def unpack_single_file(cbz_file: str, cbz_folder: str):
@@ -32,34 +32,27 @@ def unpack_single_file(cbz_file: str, cbz_folder: str):
         try:
             archive_file = zipfile.ZipFile(cbz_file)
         except zipfile.BadZipFile:
-            print(f"Maybe {cbz_file} is RAR file in fact?")
+            print(f"Maybe {cbz_file} is a RAR file in fact?")
             archive_file = rarfile.RarFile(cbz_file)
     elif extension == ".cbr":
         try:
             archive_file = rarfile.RarFile(cbz_file)
         except rarfile.BadRarFile:
-            print(f"Maybe {cbz_file} is ZIP file in fact?")
+            print(f"Maybe {cbz_file} is a ZIP file in fact?")
             archive_file = zipfile.ZipFile(cbz_file)
     else:
-        print(cbz_file)
-        print(extension)
-        raise ValueError("Another extension")
+        raise ValueError(f"Wrong extension {extension} for {cbz_file}, should be .cbz or .cbr")
 
-    temp_folder = f"temp_{name}"
-    archive_file.extractall(temp_folder)
-    print(f"Unpacked {cbz_file} to temp folder")
+    with tempfile.TemporaryDirectory() as temp_folder:
+        archive_file.extractall(temp_folder)
+        print(f"Unpacked {cbz_file} to a temp folder")
 
-    for filename in list_pages(temp_folder):
-        print(f"Moving {filename} to main folder")
-        os.renames(filename, join(f"{cbz_folder}", name, basename(filename)))
-
-    try:
-        rmtree(temp_folder)
-    except FileNotFoundError:
-        pass
+        for filename in list_pages(temp_folder):
+            print(f"Moving {filename} to the main folder")
+            os.renames(filename, join(f"{cbz_folder}", name, basename(filename)))
 
 
-def unpack_files(cbzs: List, cbz_folder: str):
+def unpack_files(cbzs: list, cbz_folder: str):
     for cbz_file in cbzs:
         try:
             unpack_single_file(cbz_file, cbz_folder)
@@ -76,34 +69,30 @@ def pack_files(result_filename: str, cbz_folder: str):
             zf.write(page)
 
 
-def remove_temp_folder(cbz_folder: str):
-    print(f"Removing temp folder {cbz_folder}")
-    rmtree(cbz_folder)
-
-
 def merge(folder: str, result_filename: str):
-    cbz_folder = "cbz_merger_temp"
+    with tempfile.TemporaryDirectory() as cbz_folder:
+        if result_filename is None:
+            result_filename = "result.cbz"
+        elif not result_filename.endswith(".cbz"):
+            result_filename = f"{result_filename}.cbz"
 
-    if result_filename is None:
-        result_filename = "result.cbz"
-    elif not result_filename.endswith(".cbz"):
-        result_filename = f"{result_filename}.cbz"
+        try:
+            os.remove(result_filename)
+        except FileNotFoundError:
+            pass
 
-    try:
-        os.remove(result_filename)
-    except FileNotFoundError:
-        pass
-
-    cbzs = list_cbz_files(folder)
-    unpack_files(cbzs, cbz_folder)
-    pack_files(result_filename, cbz_folder)
-    remove_temp_folder(cbz_folder)
+        cbzs = list_cbz_files(folder)
+        unpack_files(cbzs, cbz_folder)
+        pack_files(result_filename, cbz_folder)
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("folder", help="Folder to scan for CBZ/CBR files")
-    parser.add_argument("--result_name", "-r", help="Name of the CBZ file created by merge")
+    parser.add_argument("--result_name", "-r", help="Name of the CBZ file created by merging")
     args = parser.parse_args()
 
     merge(folder=args.folder, result_filename=args.result_name)
+
+if __name__ == '__main__':
+    main()
